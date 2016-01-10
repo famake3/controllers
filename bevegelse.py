@@ -1,13 +1,14 @@
 from RPi import GPIO
 import time
+import sys
 import paho.mqtt.client as mqtt
 from functools import partial
 
 PIN = 4
 
-def main():
+def main(mqtt_server, topic):
 	client = mqtt.Client()
-	client.connect("192.168.1.2", 1883, 60)
+	client.connect(mqtt_server, 1883, 60)
 	GPIO.setmode(GPIO.BCM)
 	GPIO.setup(PIN, GPIO.IN)
 	prev = None
@@ -19,9 +20,10 @@ def main():
 			payload = "OFF"
 
 		if prev != payload:
-			client.publish("kjokken/pi/bevegelse", payload)
+			client.publish(topic, payload)
 			prev = payload
 		client.loop()
 
-main()
+if __name__ == "__main__":
+	main(sys.argv[1], sys.argv[2])
 
