@@ -1,4 +1,5 @@
 #include <IRremote.h>
+#include "HomeEasy.h"
 
 const int RELAY_PIN = 2;
 const int TEMP_PINS[] = {A0, A1};
@@ -13,12 +14,16 @@ int prevTemp[NUM_TEMP];
 long prevReport = 0;
 
 IRsend irsend;
+HomeEasy homeEasy;
 
 
 void setup() {
   Serial.begin(115200);
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH);
+  homeEasy = HomeEasy();
+  homeEasy.registerAdvancedProtocolHandler(receivedHomeEasy);
+  homeEasy.init();
 }
 
 void loop() {
@@ -35,7 +40,12 @@ void loop() {
           digitalWrite(RELAY_PIN, !data[0]);
           break;
         case FN_IR:
-          irSend();
+          if (len == 4)
+            irSend(data);
+          break;
+        case FN_RF:
+          if (len == 8)
+            rfTransmit(data);
           break;
       }
       if (funcId >= FN_TEMP && funcId < FN_TEMP + NUM_TEMP) {
@@ -67,14 +77,35 @@ void updateTemperature(int i_temp) {
     }
 }
 
-void irSend() {
+void irSend(byte* data) {
   long code = 0;
   for (int i=0; i<4; ++i) {
     code << 8;
-    code |= Serial.read();
+    code |= data[i];
   }
   irsend.sendNEC(code, 32);
 }
 
+void rfTransmit(byte* data) {
+
+}
+
+void receivedHomeEasy(unsigned long sender, unsigned int recipient, bool on, bool group) {
+  Serial.write('!');
+  Serial.write(FN_RF);
+  Serial.write(8);
+  writeLong(sender);
+  Serial.write(recipient >> 8);
+  Serial.write(recipient);
+  Serial.write(on);
+  Serial.write(group);
+}
+
+void writeLong(long l) {
+  Serial.write(l >> 24);
+  Serial.write(l >> 16);
+  Serial.write(l >> 8);
+  Serial.write(l);
+}
 
 
