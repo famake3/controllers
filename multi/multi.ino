@@ -1,5 +1,7 @@
 #include <IRremote.h>
 #include "HomeEasy.h"
+#define RCSwitchDisableReceiving
+#include <RCSwitch.h>
 
 const int RELAY_PIN = 2;
 const int TEMP_PINS[] = {A0, A1};
@@ -8,14 +10,14 @@ const int IR_PIN = 3;
 const int RF_RECV_PIN = 2;
 const int RF_SEND_PIN = 4; 
 
-const int FN_TEMP = 0x80, FN_SCREEN = 1, FN_IR = 3, FN_RF = 4;
+const int FN_TEMP = 0x80, FN_SCREEN = 1, FN_IR = 3, FN_RF = 4, FN_RF_2 = 5;
 
 int prevTemp[NUM_TEMP];
 long prevReport = 0;
 
 IRsend irsend;
 HomeEasy homeEasy;
-
+RCSwitch mySwitch = RCSwitch();
 
 void setup() {
   Serial.begin(115200);
@@ -24,6 +26,8 @@ void setup() {
   homeEasy = HomeEasy();
   homeEasy.registerAdvancedProtocolHandler(receivedHomeEasy);
   homeEasy.init();
+  mySwitch.enableTransmit(13);
+  mySwitch.setProtocol(4);
 }
 
 void loop() {
@@ -46,6 +50,10 @@ void loop() {
         case FN_RF:
           if (len == 8)
             rfTransmit(data);
+          break;
+        case FN_RF_2:
+          if (len == 3)
+            rf2Transmit(data);
           break;
       }
       if (funcId >= FN_TEMP && funcId < FN_TEMP + NUM_TEMP) {
@@ -78,16 +86,19 @@ void updateTemperature(int i_temp) {
 }
 
 void irSend(byte* data) {
-  long code = 0;
-  for (int i=0; i<4; ++i) {
-    code << 8;
-    code |= data[i];
-  }
+  long code = readLong(data);
   irsend.sendNEC(code, 32);
 }
 
-void rfTransmit(byte* data) {
+void rf2Transmit(byte* data) {
+  unsigned long code = (((long)data[0] & 0xFF) << 16) | ((long)(data[1] & 0xFF) << 8) | (data[2] & 0xFF);
+  mySwitch.send(code, 24);
+}
 
+void rfTransmit(byte* data) {
+  long sender = readLong(data);
+  int recipient = (data[4] << 8) | data[5];
+  homeEasy.sendAdvancedProtocolMessage(sender, recipient, data[6], data[7]);
 }
 
 void receivedHomeEasy(unsigned long sender, unsigned int recipient, bool on, bool group) {
@@ -108,4 +119,12 @@ void writeLong(long l) {
   Serial.write(l);
 }
 
+unsigned long readLong(byte* d) {
+  unsigned long l = 0;
+  for (int i=0; i<4; ++i) {
+    l = l << 8;
+    l |= (d[i] & 0xFF);
+  }
+  return l;
+}
 
