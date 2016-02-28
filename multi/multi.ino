@@ -1,16 +1,29 @@
-#include <IRremote.h>
-#include "HomeEasy.h"
+// Disable receiving for the other RC switch protocol
 #define RCSwitchDisableReceiving
-#include <RCSwitch.h>
 
-const int RELAY_PIN = 2;
+const int FN_TEMP = 0x80, FN_SWITCH = 1;
+
+#ifdef ENABLE_IR
+#include <IRremote.h>
+const int FN_IR = 3;
+#endif
+
+#ifdef ENABLE_NEXA_RF
+#include "HomeEasy.h"
+const int FN_RF = 4;
+#endif
+
+#ifdef ENABLE_RF2_TX
+#include <RCSwitch.h>
+const int FN_RF_2 = 5;
+#endif
+
+const int SWITCH_PIN = 2;
 const int TEMP_PINS[] = {A0, A1};
 const int NUM_TEMP = 2;
 const int IR_PIN = 3;
 const int RF_RECV_PIN = 2;
 const int RF_SEND_PIN = 4; 
-
-const int FN_TEMP = 0x80, FN_SCREEN = 1, FN_IR = 3, FN_RF = 4, FN_RF_2 = 5;
 
 int prevTemp[NUM_TEMP];
 long prevReport = 0;
@@ -21,13 +34,17 @@ RCSwitch mySwitch = RCSwitch();
 
 void setup() {
   Serial.begin(115200);
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);
+  pinMode(SWITCH_PIN, OUTPUT);
+  digitalWrite(SWITCH_PIN, HIGH);
+#ifdef ENABLE_NEXA_RF
   homeEasy = HomeEasy();
   homeEasy.registerAdvancedProtocolHandler(receivedHomeEasy);
   homeEasy.init();
+#endif
+#ifdef ENABLE_RF2_TX
   mySwitch.enableTransmit(13);
   mySwitch.setProtocol(4);
+#endif
 }
 
 void loop() {
@@ -40,21 +57,27 @@ void loop() {
       byte data[len];
       Serial.readBytes(data, len);
       switch (funcId) {
-        case FN_SCREEN:
-          digitalWrite(RELAY_PIN, !data[0]);
+        case FN_SWITCH:
+          digitalWrite(SWITCH_PIN, !data[0]);
           break;
+#ifdef ENABLE_IR
         case FN_IR:
           if (len == 4)
             irSend(data);
           break;
+#endif
+#ifdef ENABLE_NEXA_RF
         case FN_RF:
           if (len == 8)
             rfTransmit(data);
           break;
+#endif
+#ifdef ENABLE_RF2_TX
         case FN_RF_2:
           if (len == 3)
             rf2Transmit(data);
           break;
+#endif
       }
       if (funcId >= FN_TEMP && funcId < FN_TEMP + NUM_TEMP) {
         prevTemp[funcId - FN_TEMP] = 0;
@@ -85,16 +108,21 @@ void updateTemperature(int i_temp) {
     }
 }
 
+#ifdef ENABLE_IR
 void irSend(byte* data) {
   long code = readLong(data);
   irsend.sendNEC(code, 32);
 }
+#endif
 
+#ifdef ENABLE_RF2_TX
 void rf2Transmit(byte* data) {
   unsigned long code = (((long)data[0] & 0xFF) << 16) | ((long)(data[1] & 0xFF) << 8) | (data[2] & 0xFF);
   mySwitch.send(code, 24);
 }
+#endif
 
+#ifdef ENABLE_NEXA_RF
 void rfTransmit(byte* data) {
   long sender = readLong(data);
   int recipient = (data[4] << 8) | data[5];
@@ -111,6 +139,7 @@ void receivedHomeEasy(unsigned long sender, unsigned int recipient, bool on, boo
   Serial.write(on);
   Serial.write(group);
 }
+#endif
 
 void writeLong(long l) {
   Serial.write(l >> 24);
