@@ -1,21 +1,31 @@
-// Disable receiving for the other RC switch protocol
-#define RCSwitchDisableReceiving
 
 const int FN_TEMP = 0x80, FN_SWITCH = 1;
 
+
+//#define ENABLE_IR
+//#include "IRremote.h"
+
+//#define ENABLE_NEXA_RF
+//#include "HomeEasy.h"
+
+//#define ENABLE_RF2_TX
+// // Disable receiving for the other RC switch protocol
+//#define RCSwitchDisableReceiving
+//#include <RCSwitch.h>
+
 #ifdef ENABLE_IR
-#include <IRremote.h>
 const int FN_IR = 3;
+IRsend irsend;
 #endif
 
 #ifdef ENABLE_NEXA_RF
-#include "HomeEasy.h"
 const int FN_RF = 4;
+HomeEasy homeEasy;
 #endif
 
 #ifdef ENABLE_RF2_TX
-#include <RCSwitch.h>
 const int FN_RF_2 = 5;
+RCSwitch mySwitch = RCSwitch();
 #endif
 
 const int SWITCH_PIN = 2;
@@ -28,9 +38,6 @@ const int RF_SEND_PIN = 4;
 int prevTemp[NUM_TEMP];
 long prevReport = 0;
 
-IRsend irsend;
-HomeEasy homeEasy;
-RCSwitch mySwitch = RCSwitch();
 
 void setup() {
   Serial.begin(115200);
