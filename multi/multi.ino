@@ -1,6 +1,6 @@
+#include "settings.h"
 
 const int FN_TEMP = 0x80, FN_SWITCH = 1;
-
 
 //#define ENABLE_IR
 //#include "IRremote.h"
