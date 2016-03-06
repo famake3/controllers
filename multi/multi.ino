@@ -1,17 +1,9 @@
 #include "settings.h"
 
+#include <HomeEasy.h>
+
 const int FN_TEMP = 0x80, FN_SWITCH = 1;
 
-//#define ENABLE_IR
-//#include "IRremote.h"
-
-//#define ENABLE_NEXA_RF
-//#include "HomeEasy.h"
-
-//#define ENABLE_RF2_TX
-// // Disable receiving for the other RC switch protocol
-//#define RCSwitchDisableReceiving
-//#include <RCSwitch.h>
 
 #ifdef ENABLE_IR
 const int FN_IR = 3;
@@ -48,10 +40,6 @@ void setup() {
   homeEasy.registerAdvancedProtocolHandler(receivedHomeEasy);
   homeEasy.init();
 #endif
-#ifdef ENABLE_RF2_TX
-  mySwitch.enableTransmit(13);
-  mySwitch.setProtocol(4);
-#endif
 }
 
 void loop() {
@@ -77,12 +65,6 @@ void loop() {
         case FN_RF:
           if (len == 8)
             rfTransmit(data);
-          break;
-#endif
-#ifdef ENABLE_RF2_TX
-        case FN_RF_2:
-          if (len == 3)
-            rf2Transmit(data);
           break;
 #endif
       }
@@ -119,13 +101,6 @@ void updateTemperature(int i_temp) {
 void irSend(byte* data) {
   long code = readLong(data);
   irsend.sendNEC(code, 32);
-}
-#endif
-
-#ifdef ENABLE_RF2_TX
-void rf2Transmit(byte* data) {
-  unsigned long code = (((long)data[0] & 0xFF) << 16) | ((long)(data[1] & 0xFF) << 8) | (data[2] & 0xFF);
-  mySwitch.send(code, 24);
 }
 #endif
 

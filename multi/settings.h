@@ -1,13 +1,9 @@
 // Use this file to manage which functions are enabled
+// Note that the corresponding #includ must be uncommented. 
 
 //#define ENABLE_IR
 //#include "IRremote.h"
 
-//#define ENABLE_NEXA_RF
-//#include "HomeEasy.h"
+#define ENABLE_NEXA_RF
 
-//#define ENABLE_RF2_TX
-// // Disable receiving for the other RC switch protocol
-//#define RCSwitchDisableReceiving
-//#include <RCSwitch.h>
 
