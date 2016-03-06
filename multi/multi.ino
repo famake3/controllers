@@ -25,7 +25,7 @@ const int TEMP_PINS[] = {A0, A1};
 const int NUM_TEMP = 2;
 const int IR_PIN = 3;
 const int RF_RECV_PIN = 2;
-const int RF_SEND_PIN = 4; 
+const int RF_SEND_PIN = 4;
 
 int prevTemp[NUM_TEMP];
 long prevReport = 0;
