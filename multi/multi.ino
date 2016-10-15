@@ -70,12 +70,13 @@ void loop() {
 #endif
       }
       if (funcId >= FN_TEMP && funcId < FN_TEMP + NUM_TEMP) {
-        prevTemp[funcId - FN_TEMP] = 0;
+        prevTemp[funcId - FN_TEMP] = -32767;
         prevReport = 0;
       }
     }
     long now = millis();
-    if (now > prevReport + 60000) {
+    // Rate-limit to 1/sec
+    if (now > prevReport + 1000) {
       for (i = 0; i<NUM_TEMP; ++i) {
         updateTemperature(i);
       }
@@ -85,7 +86,10 @@ void loop() {
 }
 
 void updateTemperature(int i_temp) {
-    int temp = analogRead(TEMP_PINS[i_temp]);
+    int val = analogRead(TEMP_PINS[i_temp]);
+    float volt = (5.0 * val / 1024.0);
+    float real_temp = (volt - 0.5) * 100.0;
+    int temp = round(10 * real_temp);
     if (temp != prevTemp[i_temp]) {
       Serial.write('!');
       Serial.write(FN_TEMP + i_temp);
