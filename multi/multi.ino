@@ -30,10 +30,12 @@ long prevReport = 0;
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   pinMode(SWITCH_PIN, OUTPUT);
   digitalWrite(SWITCH_PIN, HIGH);
 #ifdef ENABLE_NEXA_RF
+  pinMode(13, OUTPUT);
+  digitalWrite(13, LOW);
   homeEasy = HomeEasy();
   homeEasy.registerAdvancedProtocolHandler(receivedHomeEasy);
   homeEasy.init();
@@ -47,6 +49,7 @@ void loop() {
       if (Serial.read() != '!') return;
       int funcId = Serial.read();
       int len = Serial.read();
+      if (len > 16) return;
       byte data[len];
       Serial.readBytes(data, len);
       switch (funcId) {
