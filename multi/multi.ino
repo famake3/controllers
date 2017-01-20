@@ -2,8 +2,7 @@
 
 #include <HomeEasy.h>
 
-const int FN_TEMP = 0x80, FN_SWITCH = 1;
-
+const int FN_TEMP = 0x80, FN_SWITCH = 1, FN_INPUTSWITCH = 0x40;
 
 #ifdef ENABLE_IR
 const int FN_IR = 3;
@@ -21,29 +20,39 @@ RCSwitch mySwitch = RCSwitch();
 #endif
 
 const int SWITCH_PIN = 2;
-const int TEMP_PINS[] = {A0, A1};
-const int NUM_TEMP = 2;
+const int TEMP_PINS[] = {A0, A1, A2};
+const int NUM_TEMP = 3;
 const int IR_PIN = 3;
 
-int prevTemp[NUM_TEMP];
-long prevReport = 0;
+const int N_SAMPLES = 10; // Even number
+long tempSampleTime;
+int tempReportCounter = 0;
+int tempSamples[NUM_TEMP][N_SAMPLES] = {};
 
+const int INPUTSWITCH_PINS[] = {4,5};
+const int INPUTSWITCH_MODE[] = {INPUT, INPUT_PULLUP};
+const int N_INPUT_SWITCHES = sizeof(INPUTSWITCH_PINS) / sizeof(int);
+bool inputSwitchState[N_INPUT_SWITCHES] = {};
 
 void setup() {
   Serial.begin(9600);
   pinMode(SWITCH_PIN, OUTPUT);
   digitalWrite(SWITCH_PIN, HIGH);
+  for (int i=0; i<N_INPUT_SWITCHES; ++i) 
+    pinMode(INPUTSWITCH_PINS[i], INPUTSWITCH_MODE[i]);
 #ifdef ENABLE_NEXA_RF
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
   homeEasy = HomeEasy();
   homeEasy.registerAdvancedProtocolHandler(receivedHomeEasy);
   homeEasy.init();
+  tempSampleTime = millis();
 #endif
 }
 
 void loop() {
   int i;
+  long now = millis();
   if (Serial) {
     if (Serial.available() >= 3) {
       if (Serial.read() != '!') return;
@@ -70,36 +79,74 @@ void loop() {
 #endif
       }
       if (funcId >= FN_TEMP && funcId < FN_TEMP + NUM_TEMP) {
-        prevTemp[funcId - FN_TEMP] = -32767;
-        prevReport = 0;
+        updateTemperature(funcId-FN_TEMP, analogRead(TEMP_PINS[funcId-FN_TEMP]));
+      }
+      if (funcId >= FN_INPUTSWITCH && funcId < FN_INPUTSWITCH + N_INPUT_SWITCHES) {
+        sendSwitchState(funcId-FN_INPUTSWITCH);
       }
     }
-    long now = millis();
     // Rate-limit to 1/sec
-    if (now > prevReport + 1000) {
-      for (i = 0; i<NUM_TEMP; ++i) {
-        updateTemperature(i);
+    
+    if ((now - tempSampleTime) >= 0) {
+      tempSampleTime += 600;
+      for (int t = 0; t<NUM_TEMP; ++t) {
+        int val = analogRead(TEMP_PINS[t]);
+        for (i=0; i<N_SAMPLES && val < tempSamples[t][i]; ++i);
+        int prev = val;
+        for (; i<N_SAMPLES; ++i) {
+          int cur = tempSamples[t][i];
+          tempSamples[t][i] = prev;
+          prev = cur;
+        }
       }
-      prevReport = now;
+      if (++tempReportCounter == N_SAMPLES) {
+        for (int t = 0; t<NUM_TEMP; ++t) {
+          long sum = 0;
+          for (i=1; i<N_SAMPLES-1; ++i) {
+            sum += tempSamples[t][i];
+          }
+          float val = sum / (N_SAMPLES-2.0);
+          updateTemperature(t, val);
+          for (i=0; i<N_SAMPLES; ++i) 
+            tempSamples[t][i] = 0;
+        }
+        tempReportCounter = 0;
+      }
+    }
+  }
+
+  for (int i=0; i<N_INPUT_SWITCHES; ++i) {
+    bool newState = (byte)digitalRead(INPUTSWITCH_PINS[i]);
+    if (newState != inputSwitchState[i]) {
+      inputSwitchState[i] = newState;
+      sendSwitchState(i);
     }
   }
 }
 
-void updateTemperature(int i_temp) {
-    int val = analogRead(TEMP_PINS[i_temp]);
-    float volt = (5.0 * val / 1024.0);
+
+void sendSwitchState(int index) {
+  Serial.write('!');
+  Serial.write(FN_INPUTSWITCH + index);
+  Serial.write(1);
+  Serial.write(inputSwitchState[index]);
+}
+
+
+void updateTemperature(int i_temp, float val) {
+    float volt = (5.0 * val / 1023.0);
     float real_temp = (volt - 0.5) * 100.0;
     int temp = round(10 * real_temp);
-    if (temp != prevTemp[i_temp]) {
-      Serial.write('!');
-      Serial.write(FN_TEMP + i_temp);
-      Serial.write(2);
-      Serial.write(temp >> 8);
-      Serial.write(temp & 0xFF);
-      Serial.println(temp);
-      prevTemp[i_temp] = temp;
-      prevReport = millis();
+    
+    if (i_temp == 0) {
+      // McHack
+      temp += 62;
     }
+    Serial.write('!');
+    Serial.write(FN_TEMP + i_temp);
+    Serial.write(2);
+    Serial.write(temp >> 8);
+    Serial.write(temp & 0xFF);
 }
 
 #ifdef ENABLE_IR
