@@ -67,6 +67,9 @@ void loop() {
           break;
 #ifdef ENABLE_IR
         case FN_IR:
+<<<<<<< HEAD
+          irSend(data);
+=======
           if (len == 4)
             irSend(data);
           break;
@@ -75,6 +78,7 @@ void loop() {
         case FN_RF:
           if (len == 8)
             rfTransmit(data);
+>>>>>>> dd1f6fa832ed81f418b8740f7481980f1e470502
           break;
 #endif
       }
@@ -149,9 +153,18 @@ void updateTemperature(int i_temp, float val) {
     Serial.write(temp & 0xFF);
 }
 
+<<<<<<< HEAD
+void irSend(byte* data) {
+  long code = 0;
+  for (int i=0; i<4; ++i) {
+    code = code << 8;
+    code |= (data[i] & 0xFF);
+  }
+=======
 #ifdef ENABLE_IR
 void irSend(byte* data) {
   long code = readLong(data);
+>>>>>>> dd1f6fa832ed81f418b8740f7481980f1e470502
   irsend.sendNEC(code, 32);
 }
 #endif
