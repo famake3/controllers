@@ -33,7 +33,7 @@ void loop() {
           prevReport = 0;
           break;
         case FN_IR:
-          irSend();
+          irSend(data);
           break;
       }
     }
@@ -54,11 +54,11 @@ void updateTemperature() {
     }
 }
 
-void irSend() {
+void irSend(byte* data) {
   long code = 0;
   for (int i=0; i<4; ++i) {
-    code << 8;
-    code |= Serial.read();
+    code = code << 8;
+    code |= (data[i] & 0xFF);
   }
   irsend.sendNEC(code, 32);
 }
