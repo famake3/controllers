@@ -137,11 +137,6 @@ void updateTemperature(int i_temp, float val) {
     float volt = (5.0 * val / 1023.0);
     float real_temp = (volt - 0.5) * 100.0;
     int temp = round(10 * real_temp);
-    
-    if (i_temp == 0) {
-      // McHack
-      temp += 62;
-    }
     Serial.write('!');
     Serial.write(FN_TEMP + i_temp);
     Serial.write(2);
