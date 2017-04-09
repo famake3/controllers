@@ -1,7 +1,7 @@
-#include <Ethernet.h>
+#include <PubSubClient.h>
+#include <Ethernet2.h>
 #include <EthernetUdp.h>
 #include <EthernetClient.h>
-#include <PubSubClient.h>
 
 byte mac[] = {
   0xFE, 0xED, 0xFA, 0xAA, 0xAA, 0xAA
@@ -15,11 +15,13 @@ PubSubClient mqtt("192.168.1.2", 1883, client);
 const int HEADER_LEN = 18, MAX_CHAN = 512;
 byte packet[HEADER_LEN + MAX_CHAN];
 
-const int UNIVERSE_0[] = {2,3,4,5,6,7,8,9};
+const int UNIVERSE_0[] = {45,3,4,5,6,7,8,9};
 const int UNIVERSE_1[] = {10,11,12,13};
 const int* ANT_UNIVERSE[] = {UNIVERSE_0, UNIVERSE_1};
 const int N_CHAN[] = {8, 4};
 const int N_UNIVERSE = sizeof(ANT_UNIVERSE) / sizeof(ANT_UNIVERSE[0]);
+
+const int STROBE_PINNA = 0;
 
 const int INPUT_PINNA = 1;
 int doorStatus = -1;
@@ -34,6 +36,7 @@ void setup() {
     }
   }
   pinMode(INPUT_PINNA, INPUT_PULLUP);
+  pinMode(STROBE_PINNA, INPUT); // TODO output sjekk pin
 }
 
 void loop() {
