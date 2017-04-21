@@ -1,7 +1,7 @@
-#include <Ethernet2.h>
-//#include <EthernetUdp.h>
-//#include <EthernetClient.h>
 #include <PubSubClient.h>
+#include <Ethernet2.h>
+#include <EthernetUdp.h>
+#include <EthernetClient.h>
 
 byte mac[] = {
   0xFE, 0xED, 0xFA, 0xAA, 0xAA, 0xAA
