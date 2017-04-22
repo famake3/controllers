@@ -26,6 +26,17 @@ int doorState = -1;
 
 const int STROBE_PINNA = 41;
 
+float strobe_freq = 10.0, strobe_power = 40.0;
+float strobe_duration = 500.0;
+
+const float DEF_STROBE_FREQ = 10.0;
+const float DEF_STROBE_DURN = 500.0;
+const float MAX_FREQ = 70.0;
+
+long strobe_last_cmd = 0;
+long strobe_last_blink_us = 0;
+bool strobe_active = false;
+
 void setup() {
   Ethernet.begin(mac, ip);
   udp.begin(0x1936);
@@ -64,11 +75,22 @@ void loop() {
           for (int ch=0; ch<min(N_CHAN[universe], length); ++ch) {
             analogWrite(channels[ch], packet[HEADER_LEN + ch]);
           }
+          if (universe == 0 && length > N_CHAN[universe]) {
+              // Extra channels in universe 0 are for stroboscope
+              int num_chan = length - N_CHAN[universe];
+              strobe_freq = (MAX_FREQ * packet[HEADER_LEN + ch]) / 256.0;
+              strobe_active = true;
+          }
         }
       }
     }
   }
-  // 2. Input: door fooler
+  // 2. Strobe
+  long now = micros();
+  float period = 1e6 / strobe_freq;
+  if (now - strobe_last_blink_us >= period) {
+  }
+  // 3. Input: door fooler
   int door = digitalRead(INPUT_PINNA) == HIGH ? 1 : 0;
   if (door != doorState) {
     mqtt.publish("stue/skapDoor", door ? "OPEN" : "CLOSED");
