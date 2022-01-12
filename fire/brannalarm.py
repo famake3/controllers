@@ -39,11 +39,11 @@ try:
 			if not input_plus_state:
 				# Set minus pin high to check continuity
 				GPIO.output(MINUS_PIN, True)
-				time.sleep(0.01) # Give the electrons time to move
+				time.sleep(0.1) # Give the electrons time to move
 				input_plus_state = GPIO.input(PLUS_INPUT_PIN)
 				client.publish(CONTINUITY_TOPIC, "ON" if input_plus_state else "OFF")
 				GPIO.output(MINUS_PIN, False)
-				time.sleep(0.01)
+				time.sleep(0.1)
 				input_plus_state = GPIO.input(PLUS_INPUT_PIN)
 			if input_plus_state: # This can only mean one thing
 				client.publish(FIRE_TOPIC, "ON")
