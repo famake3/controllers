@@ -15,7 +15,7 @@ alarm_time = 0
 alarm_on_state = False
 
 client = mqtt.Client()
-client.connect("192.168.1.2", 1883, 60)
+client.connect("192.168.1.8", 1883, 60)
 client.loop_start()
 
 def detect_and_report():
