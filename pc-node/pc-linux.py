@@ -13,7 +13,7 @@ def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
     client.connect(mqtt_server)
 
     def on_connect(client, _, flags, rc):
-        client.subscribe(f"{topic_base}/#")
+        client.subscribe("{}/#".format(topic_base))
     client.on_connect = on_connect
     sounddir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "sounds")
     def on_message(client, _, msg):
@@ -22,11 +22,11 @@ def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
             str_payload = msg.payload.decode('ascii')
         except ValueError:
             return
-        if msg.topic == f"{topic_base}/command":
+        if msg.topic == "{}/command".format(topic_base):
             if str_payload == "alarmbeep":
-                subprocess.run(["paplay", f"{sounddir}/pipipipipipip.wav"])
+                subprocess.run(["paplay", "{}/pipipipipipip.wav".format(sounddir)])
             elif str_payload == "beep":
-                subprocess.run(["paplay", f"{sounddir}/pip.wav"])
+                subprocess.run(["paplay", "{}/pip.wav".format(sounddir)])
             elif str_payload == "startmine" and pc in ['blackhole']:
                 subprocess.run(["supervisorctl","start","xmr"])
             elif str_payload == "stopmine" and pc in ['blackhole']:
@@ -38,13 +38,13 @@ def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
             elif str_payload == "lockscreen" and pc in ['blackhole']:
                 subprocess.run(["bash","/etc/openhab-bin/lock-screen.sh"])
             elif str_payload == "wakealarm":
-                wakealarm_process = subprocess.Popen(["paplay", f"{sounddir}/vekke.wav"])
+                wakealarm_process = subprocess.Popen(["paplay", "{}/vekke.wav".format(sounddir)])
             elif str_payload == "wakealarmkill":
                 if wakealarm_process is not None and wakealarm_process.poll() is None:
                     wakealarm_process.kill()
-        elif msg.topic == f"{topic_base}/pushover" and pc == "blackhole":
+        elif msg.topic == "{}/pushover".format(topic_base) and pc == "blackhole":
             pushover(0, str_payload, pushover_user, pushover_token)
-        elif msg.topic == f"{topic_base}/pushoverAlarm" and pc == "blackhole":
+        elif msg.topic == "{}/pushoverAlarm".format(topic_base) and pc == "blackhole":
             pushover(2, str_payload, pushover_user, pushover_token)
 
     client.on_message = on_message
