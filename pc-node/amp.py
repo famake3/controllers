@@ -14,6 +14,8 @@ def main(mqtt_server, topic_base, serial_port):
         client.subscribe(f"{topic_base}/cmd/#")
     client.on_connect = on_connect
 
+    expect_error = False
+
     def on_message(client, _, msg):
         try:
             str_payload = msg.payload.decode('ascii')
@@ -23,7 +25,8 @@ def main(mqtt_server, topic_base, serial_port):
             if str_payload == "ON":
                 serial_port.write("power_on!".encode('ascii'))
             elif str_payload == "OFF":
-                serial_port.write("power_on!".encode('ascii'))
+                serial_port.write("power_off!".encode('ascii'))
+                expect_error = True
         elif msg.topic == f"{topic_base}/cmd/brightness":
             try:
                 # Convert to 0 (bright) to 6 (dim)
@@ -63,6 +66,11 @@ def main(mqtt_server, topic_base, serial_port):
                 c = serial_port.read().decode('ascii')
             except ValueError:
                 continue
+            except IOError:
+                if expect_error:
+                    continue
+                else:
+                    raise
             response += c
         match response[:-1].split("="):
             case ['power', power]:
