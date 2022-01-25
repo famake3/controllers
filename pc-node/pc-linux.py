@@ -2,6 +2,7 @@ import subprocess
 from paho.mqtt import client as mqtt
 import sys
 import os
+import time
 import requests
 
 # Run predefined commands on computer
@@ -10,7 +11,14 @@ wakealarm_process = None
 
 def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
     client = mqtt.Client()
-    client.connect(mqtt_server)
+    connected = False
+    while not connected:
+        time.sleep(5)
+        try:
+            client.connect(mqtt_server)
+            connected = True
+        except IOError:
+            pass
 
     def on_connect(client, _, flags, rc):
         client.subscribe("{}/#".format(topic_base))
