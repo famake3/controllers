@@ -35,10 +35,14 @@ def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
                 subprocess.run(["paplay", "{}/pipipipipipip.wav".format(sounddir)])
             elif str_payload == "beep":
                 subprocess.run(["paplay", "{}/pip.wav".format(sounddir)])
-            elif str_payload == "startmine" and pc in ['blackhole']:
-                subprocess.run(["supervisorctl","start","xmr"])
-            elif str_payload == "stopmine" and pc in ['blackhole']:
-                subprocess.run(["supervisorctl","stop","xmr"])
+            elif str_payload.endswith("mine"):
+                running = subprocess.run(["supervisorctl","pid","xmr"],
+                                        encoding="ascii", stdout=subprocess.PIPE
+                                        ).stdout.strip() != "0"
+                if not running and str_payload == "startmine" and pc in ['blackhole']:
+                    subprocess.run(["supervisorctl","start","xmr"])
+                elif running and str_payload == "stopmine" and pc in ['blackhole']:
+                    subprocess.run(["supervisorctl","stop","xmr"])
             elif str_payload == "badmineon" and pc in ['blackhole']:
                 subprocess.run(["bash","/etc/openhab-bin/badmine","on"])
             elif str_payload == "badmineoff" and pc in ['blackhole']:
