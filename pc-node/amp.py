@@ -15,6 +15,7 @@ def main(mqtt_server, topic_base, serial_port):
     client.on_connect = on_connect
 
     expect_error = False
+    power_state = None
 
     def on_message(client, _, msg):
         try:
@@ -27,36 +28,40 @@ def main(mqtt_server, topic_base, serial_port):
             elif str_payload == "OFF":
                 serial_port.write("power_off!".encode('ascii'))
                 expect_error = True
-        elif msg.topic == f"{topic_base}/cmd/brightness":
-            try:
-                # Convert to 0 (bright) to 6 (dim)
-                level = int(round((100.0 - float(str_payload)) / 16.6))
-                serial_port.write(f"dimmer_{level}!".encode('ascii'))
-            except:
-                pass            
-        elif msg.topic == f"{topic_base}/cmd/source":
-            if str_payload in ['rcd', 'cd', 'coax1̈́' 'coax2', 'opt1', 'opt2',
-                             'aux1', 'aux2', 'tuner', 'phono', 'usb']:
-                serial_port.write(f"{str_payload}!".encode('ascii'))
-        elif msg.topic == f"{topic_base}/cmd/volume":
-            match str_payload:
-                case 'INCREASE':
-                    serial_port.write("volume_up!".encode('ascii'))
-                case 'DECREASE':
-                    serial_port.write("volume_down!".encode('ascii'))
-                case level:
-                    if level.isdigit():
-                        l = int(level)
-                        if l >= 0 and l <= 96:
-                            serial_port.write(f"volume_{l}!".encode('ascii'))
-        elif msg.topic == f"{topic_base}/cmd/mute":
-            if str_payload == "ON":
-                serial_port.write("mute_on!".encode('ascii'))
-            else:
-                serial_port.write("mute_off!".encode('ascii'))
+        elif power_state == "ON":
+            if msg.topic == f"{topic_base}/cmd/brightness":
+                try:
+                    # Convert to 0 (bright) to 6 (dim)
+                    level = int(round((100.0 - float(str_payload)) / 16.6))
+                    serial_port.write(f"dimmer_{level}!".encode('ascii'))
+                except:
+                    pass            
+            elif msg.topic == f"{topic_base}/cmd/source":
+                if str_payload in ['rcd', 'cd', 'coax1' 'coax2', 'opt1', 'opt2',
+                                'aux1', 'aux2', 'tuner', 'phono', 'usb']:
+                    serial_port.write(f"{str_payload}!".encode('ascii'))
+            elif msg.topic == f"{topic_base}/cmd/volume":
+                match str_payload:
+                    case 'INCREASE':
+                        serial_port.write("volume_up!".encode('ascii'))
+                    case 'DECREASE':
+                        serial_port.write("volume_down!".encode('ascii'))
+                    case level:
+                        if level.isdigit():
+                            l = int(level)
+                            if l >= 0 and l <= 96:
+                                serial_port.write(f"volume_{l}!".encode('ascii'))
+            elif msg.topic == f"{topic_base}/cmd/mute":
+                if str_payload == "ON":
+                    serial_port.write("mute_on!".encode('ascii'))
+                else:
+                    serial_port.write("mute_off!".encode('ascii'))
     
     client.on_message = on_message
     client.loop_start()
+
+    serial_port.write("display_update_manual!".encode('ascii'))
+    serial_port.write("get_current_power!".encode('ascii'))
 
     while True:
         response = ""
@@ -74,7 +79,8 @@ def main(mqtt_server, topic_base, serial_port):
             response += c
         match response[:-1].split("="):
             case ['power', power]:
-                client.publish(f"{topic_base}/state/power", "ON" if power == "on" else "OFF")
+                power_state = "ON" if power == "on" else "OFF"
+                client.publish(f"{topic_base}/state/power", power_state)
             case ['volume', 'max']:
                 client.publish(f"{topic_base}/state/volume", "96")
             case ['volume', 'min']:
