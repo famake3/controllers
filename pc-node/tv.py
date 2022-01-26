@@ -1,6 +1,7 @@
 import serial
 from paho.mqtt import client as mqtt
 import sys
+import time
 
 # Write-only gateway for LG TV serial, some specific commands
 
@@ -22,6 +23,7 @@ def main(mqtt_server, topic_base, serial_port):
         if msg.topic == f"{topic_base}/power":
             if str_payload == "ON":
                 tv_serial.write("ka 00 01\r".encode('ascii'))
+                time.sleep(0.5)
             elif str_payload == "OFF":
                 tv_serial.write("ka 00 00\r".encode('ascii'))
         elif msg.topic == f"{topic_base}/backlight":
