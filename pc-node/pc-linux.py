@@ -9,7 +9,7 @@ import requests
 
 wakealarm_process = None
 
-def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
+def main(mqtt_server, topic_base, pc):
     client = mqtt.Client()
     connected = False
     while not connected:
@@ -54,28 +54,9 @@ def main(mqtt_server, topic_base, pc, pushover_user=None, pushover_token=None):
             elif str_payload == "wakealarmkill":
                 if wakealarm_process is not None and wakealarm_process.poll() is None:
                     wakealarm_process.kill()
-        elif msg.topic == "{}/pushover".format(topic_base) and pc == "blackhole":
-            pushover(0, str_payload, pushover_user, pushover_token)
-        elif msg.topic == "{}/pushoverAlarm".format(topic_base) and pc == "blackhole":
-            pushover(2, str_payload, pushover_user, pushover_token)
 
     client.on_message = on_message
     client.loop_forever()
-
-def pushover(priority, message, user, token):
-    data={
-        'token': token,
-        'user': user,
-        'message': message,
-        'title': 'Husvarsel',
-        'priority': priority,
-    }
-    if priority >= 2:
-        data['retry'] = 60
-        data['expire'] = 10800
-    r = requests.post(
-                "https://api.pushover.net/1/messages.json",
-                data=data)
 
 if __name__ == "__main__":
     main(*sys.argv[1:])
