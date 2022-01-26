@@ -1,35 +1,40 @@
+from dataclasses import dataclass
 import serial
 from paho.mqtt import client as mqtt
 import sys
 
 # Full-duplex gateway for Rotel RA11 serial to MQTT
 
+@dataclass
+class State:
+    expect_error : bool
+    power_state_on : bool
+
 def main(mqtt_server, topic_base, serial_port):
     serial_port = serial.Serial(serial_port, baudrate=115200)
 
-    client = mqtt.Client()
+    state = State(False, False)
+    client = mqtt.Client(userdata=state)
     client.connect(mqtt_server)
 
     def on_connect(client, _, flags, rc):
         client.subscribe(f"{topic_base}/cmd/#")
     client.on_connect = on_connect
 
-    expect_error = False
-    power_state = None
-
-    def on_message(client, _, msg):
+    def on_message(client, state, msg):
         try:
             str_payload = msg.payload.decode('ascii')
         except ValueError:
             return
-        if msg.topic == f"{topic_base}/cmd/power":
-            if str_payload == "ON":
+        if msg.topic == f"{topic_base}/cmd/power" and str_payload == "ON":
                 serial_port.write("power_on!".encode('ascii'))
-            elif str_payload == "OFF":
+                state.power_state_on = True
+        elif state.power_state_on:
+            if msg.topic == f"{topic_base}/cmd/power" and str_payload == "OFF":
                 serial_port.write("power_off!".encode('ascii'))
-                expect_error = True
-        elif power_state == "ON":
-            if msg.topic == f"{topic_base}/cmd/brightness":
+                state.expect_error = True
+                state.power_state_on = False
+            elif msg.topic == f"{topic_base}/cmd/brightness":
                 try:
                     # Convert to 0 (bright) to 6 (dim)
                     level = int(round((100.0 - float(str_payload)) / 16.6))
@@ -72,15 +77,15 @@ def main(mqtt_server, topic_base, serial_port):
             except ValueError:
                 continue
             except IOError:
-                if expect_error:
+                if state.expect_error:
                     continue
                 else:
                     raise
             response += c
         match response[:-1].split("="):
             case ['power', power]:
-                power_state = "ON" if power == "on" else "OFF"
-                client.publish(f"{topic_base}/state/power", power_state)
+                state.power_state_on = power == "on"
+                client.publish(f"{topic_base}/state/power", "ON" if state.power_state_on else "OFF")
             case ['volume', 'max']:
                 client.publish(f"{topic_base}/state/volume", "96")
             case ['volume', 'min']:
