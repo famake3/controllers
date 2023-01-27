@@ -2,6 +2,9 @@
 
 #include <Ethernet.h>
 
+#include <Wire.h>
+#include "Adafruit_MCP9808.h"
+
 byte mac[] = {
   0xFE, 0xED, 0xFA, 0xAA, 0xAA, 0xAA
 };
@@ -10,29 +13,21 @@ IPAddress ip(192, 168, 1, 226);
 EthernetUDP udp;
 EthernetClient client;
 PubSubClient mqtt("192.168.1.8", 1883, client);
+Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
 
 const int HEADER_LEN = 18, MAX_CHAN = 512;
 byte packet[HEADER_LEN + MAX_CHAN];
 
-const int UNIVERSE_0[] = {7,45,6,  5,3,4,  2,11,8 };
+const int UNIVERSE_0[] = {7,45,6,  5,3,44,  2,11,8 };
 const int UNIVERSE_1[] = {12,13,9};
 const int* ANT_UNIVERSE[] = {UNIVERSE_0, UNIVERSE_1};
 const int N_CHAN[] = {9, 3};
 const int N_UNIVERSE = sizeof(ANT_UNIVERSE) / sizeof(ANT_UNIVERSE[0]);
 
-const int TEMP_PINS[] = {A0};
-const int TEMP_FUDGE[] = {0};
-const int N_TEMP_SMOOTH = 16;
 const int TEMP_RATE_LIMIT_INTERVAL = 5000;
-const int N_TEMP_IN = sizeof(TEMP_PINS) / sizeof(TEMP_PINS[0]);
-const char* TEMP_TOPIC[] = {
-  "stue/temp"
-};
-int temp_last_out[N_TEMP_IN];
-long temp_last_time[N_TEMP_IN];
-int temp_adc_samples[N_TEMP_IN][N_TEMP_SMOOTH];
-long temp_adc_sum[N_TEMP_IN];
-int temp_adc_index[N_TEMP_IN];
+const char* TEMP_TOPIC = "stue/temp";
+float temp_last_out;
+long temp_last_time;
 char temp_string_buffer[8];
 
 const int INPUT_PINNA = 14;
@@ -40,9 +35,16 @@ int doorState = -1;
 
 
 void setup() {
-  analogReference(EXTERNAL);
   Ethernet.begin(mac, ip);
   udp.begin(0x1936);
+  
+  tempsensor.begin(0x18);
+    // Mode Resolution SampleTime
+  //  0    0.5°C       30 ms
+  //  1    0.25°C      65 ms
+  //  2    0.125°C     130 ms
+  //  3    0.0625°C    250 ms
+  tempsensor.setResolution(3);
   for (int uni=0; uni<N_UNIVERSE; ++uni) {
     const int* channels = ANT_UNIVERSE[uni];
     for (int ch=0; ch<N_CHAN[uni]; ++ch) {
@@ -80,21 +82,14 @@ void loop() {
     }
   }
   long now = millis();
-  // 2. Analog in
-  for (int i=0; i<N_TEMP_IN; ++i) {
-    int val = analogRead(TEMP_PINS[i]) + TEMP_FUDGE[i];
-    // volt = (5 * val / 1023)
-    // cels = (volt - 0.5) * 100
-    temp_adc_samples[i][temp_adc_index[i]] = val;
-    temp_adc_sum[i] += val;
-    temp_adc_index[i] = (temp_adc_index[i] + 1) % N_TEMP_SMOOTH;
-    temp_adc_sum[i] -= temp_adc_samples[i][temp_adc_index[i]];
-    int deciCelsius = (int)(((3300L * temp_adc_sum[i]) / 1023) / N_TEMP_SMOOTH - 500);
-    if ((now - temp_last_time[i]) > TEMP_RATE_LIMIT_INTERVAL && deciCelsius != temp_last_out[i]) {
-      dtostrf(deciCelsius * 0.1, 4, 1, temp_string_buffer);
-      mqtt.publish(TEMP_TOPIC[i], temp_string_buffer);
-      temp_last_out[i] = deciCelsius;
-      temp_last_time[i] = now;
+  if ((now - temp_last_time) > TEMP_RATE_LIMIT_INTERVAL) {
+    
+    float tempC = tempsensor.readTempC();
+    if (tempC != temp_last_out) {
+      dtostrf(tempC, 4, 1, temp_string_buffer);
+      mqtt.publish(TEMP_TOPIC, temp_string_buffer);
+      temp_last_out = tempC;
+      temp_last_time = now;
     }
   }
 

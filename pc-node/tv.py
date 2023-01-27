@@ -37,6 +37,8 @@ def main(mqtt_server, topic_base, serial_port):
                     tv_serial.write("xb 00 90\r".encode('ascii'))
                 case 'HDMI2':
                     tv_serial.write("xb 00 91\r".encode('ascii'))
+                case 'HDMI3':
+                    tv_serial.write("xb 00 92\r".encode('ascii'))
 
         elif msg.topic == f"{topic_base}/colorTemperature":
             match str_payload:
