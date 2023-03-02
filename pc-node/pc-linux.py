@@ -50,13 +50,11 @@ def main(mqtt_server, topic_base, pc):
             elif str_payload == "lockscreen" and pc in ['tv']:
                 subprocess.run(["bash","/home/fa2k/bin/lock-screen.sh"])
             elif str_payload == "screenoff" and pc in ['tv']:
-                #subprocess.run(["xset","dpms", "force", "off"])
+                #turn off screen
                 pass
             elif str_payload == "screenon" and pc in ['tv']:
-                time.sleep(1.0)
-                subprocess.run(["xset","dpms", "force", "off"])
-                time.sleep(5.0)
-                subprocess.run(["xset","-dpms"])
+                #turn on screen
+                pass
             elif str_payload == "wakealarm":
                 wakealarm_process = subprocess.Popen(["paplay", "{}/vekke.wav".format(sounddir)])
             elif str_payload == "wakealarmkill":
