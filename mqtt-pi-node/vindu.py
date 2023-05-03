@@ -1,7 +1,7 @@
 import paho.mqtt.client as mqtt
 import RPi.GPIO as GPIO
 import time
-from threading import Event
+from threading import Condition
 
 OPEN_PIN = 2
 CLOSE_PIN = 3
@@ -9,14 +9,14 @@ CLOSE_PIN = 3
 mqtt_server = "192.168.1.8"
 mqtt_port = 1883
 
-fullOpenTime = 44000
+fullOpenTime = 44.0
 targetPercentage = 0.0
 currentPercentage = 0.0
 currentMode = 0
 alignFirst = 0
 ALIGN_AMOUNT = 2.0
 alignAmountRemain = 0.0
-newCommandEvt = Event()
+newCommandCond = Condition()
 
 def mqttCallback(client, userdata, message):
     global targetPercentage, alignFirst, alignAmountRemain
@@ -46,7 +46,8 @@ def mqttCallback(client, userdata, message):
         else:
             alignFirst = 0
 
-        newCommandEvt.set()
+        with newCommandCond:
+            newCommandCond.notify()
 
     elif topic == "soverom/vindu/konf/tid":
         fullOpenTime = int(payload)
@@ -57,11 +58,11 @@ def controlWindow(client):
 
     lastCommandTime = 0
     while True:
-        currentTime = time.time() * 1000
+        currentTime = time.time()
+        elapsedTime = currentTime - lastCommandTime
         newPercentage = currentPercentage
 
         if currentMode != 0:
-            elapsedTime = currentTime - lastCommandTime
             deltaPercentage = 100.0 * elapsedTime * currentMode / fullOpenTime
             newPercentage = max(0, min(100, currentPercentage + deltaPercentage))
 
@@ -92,16 +93,26 @@ def controlWindow(client):
             newPct = str(currentPercentage)
             client.publish("soverom/vindu/aapningStatus", newPct)
         
-        if currentMode == 0:
-            newCommandEvt.wait(timeout=10.0)
-        else:
-            newCommandEvt.wait(timeout=0.5)
+        with newCommandCond:
+            if currentMode == 0:
+                newCommandCond.wait(timeout=10.0)
+            else:
+                remainTime = fullOpenTime * abs(targetPercentage - currentPercentage) / 100.0
+                newCommandCond.wait(timeout=max(0, min(0.5, remainTime / 2.0)))
+
 
 
 def main():
     client = mqtt.Client()
     client.on_message = mqttCallback
-    client.connect(mqtt_server, mqtt_port)
+    connected = False
+    while not connected:
+        time.sleep(5)
+        try:
+            client.connect(mqtt_server)
+            connected = True
+        except IOError:
+            pass
 
     client.loop_start()
     client.subscribe("soverom/vindu/aapning")
