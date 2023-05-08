@@ -37,14 +37,13 @@ def mqttCallback(client, userdata, message):
         else:
             return
 
-        if targetPercentage < 20:
+        alignFirst = 0
+        if targetPercentage < 2:
             alignFirst = -1
             alignAmountRemain = ALIGN_AMOUNT
-        elif targetPercentage > 80:
+        elif targetPercentage > 98:
             alignFirst = 1
             alignAmountRemain = ALIGN_AMOUNT
-        else:
-            alignFirst = 0
 
         with newCommandCond:
             newCommandCond.notify()
@@ -94,11 +93,11 @@ def controlWindow(client):
             client.publish("soverom/vindu/aapningStatus", newPct)
         
         with newCommandCond:
-            if currentMode == 0:
+            if currentMode == 0 or alignFirst:
                 newCommandCond.wait(timeout=10.0)
             else:
                 remainTime = fullOpenTime * abs(targetPercentage - currentPercentage) / 100.0
-                newCommandCond.wait(timeout=max(0, min(0.5, remainTime / 2.0)))
+                newCommandCond.wait(timeout=max(0, min(0.5, remainTime)))
 
 
 
