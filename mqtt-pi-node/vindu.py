@@ -89,12 +89,12 @@ def controlWindow(client):
 
         if newPercentage != currentPercentage:
             currentPercentage = newPercentage
-            newPct = str(currentPercentage)
+            newPct = str(round(currentPercentage))
             client.publish("soverom/vindu/aapningStatus", newPct)
         
         with newCommandCond:
             if currentMode == 0 or alignFirst:
-                newCommandCond.wait(timeout=10.0)
+                newCommandCond.wait(timeout=0.5)
             else:
                 remainTime = fullOpenTime * abs(targetPercentage - currentPercentage) / 100.0
                 newCommandCond.wait(timeout=max(0, min(0.5, remainTime)))
@@ -105,31 +105,32 @@ def main():
     client = mqtt.Client()
     client.on_message = mqttCallback
     connected = False
-    while not connected:
-        time.sleep(5)
+    while True:
+        while not connected:
+            time.sleep(5)
+            try:
+                client.connect(mqtt_server)
+                connected = True
+            except IOError:
+                pass
+
+        client.loop_start()
+        client.subscribe("soverom/vindu/aapning")
+        client.subscribe("soverom/vindu/konf/tid")
+        client.publish("soverom/vindu/oppstart", "ON")
+
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(OPEN_PIN, GPIO.OUT)
+        GPIO.setup(CLOSE_PIN, GPIO.OUT)
+
+        GPIO.output(OPEN_PIN, GPIO.LOW)
+        GPIO.output(CLOSE_PIN, GPIO.LOW)
+
         try:
-            client.connect(mqtt_server)
-            connected = True
-        except IOError:
-            pass
-
-    client.loop_start()
-    client.subscribe("soverom/vindu/aapning")
-    client.subscribe("soverom/vindu/konf/tid")
-    client.publish("soverom/vindu/oppstart", "ON")
-
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(OPEN_PIN, GPIO.OUT)
-    GPIO.setup(CLOSE_PIN, GPIO.OUT)
-
-    GPIO.output(OPEN_PIN, GPIO.LOW)
-    GPIO.output(CLOSE_PIN, GPIO.LOW)
-
-    try:
-        controlWindow(client)
-    finally:
-        GPIO.cleanup()
-        client.loop_stop()
+            controlWindow(client)
+        finally:
+            GPIO.cleanup()
+            client.loop_stop()
 
 if __name__ == "__main__":
     main()
