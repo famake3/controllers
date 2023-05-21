@@ -8,6 +8,7 @@ CLOSE_PIN = 3
 
 mqtt_server = "192.168.1.8"
 mqtt_port = 1883
+mqtt_reconnect_seconds = 60
 
 fullOpenTime = 44.0
 targetPercentage = 0.0
@@ -105,11 +106,11 @@ def main():
     client = mqtt.Client()
     client.on_message = mqttCallback
     connected = False
-    while True:
+    try:
         while not connected:
             time.sleep(5)
             try:
-                client.connect(mqtt_server)
+                client.connect(mqtt_server, mqtt_port, mqtt_reconnect_seconds)
                 connected = True
             except IOError:
                 pass
@@ -126,11 +127,13 @@ def main():
         GPIO.output(OPEN_PIN, GPIO.LOW)
         GPIO.output(CLOSE_PIN, GPIO.LOW)
 
-        try:
-            controlWindow(client)
-        finally:
-            GPIO.cleanup()
-            client.loop_stop()
+        controlWindow(client)
+
+    except RuntimeError: # Force to handle runtime error from wait_for_edge, to run finally
+            pass
+    finally:
+        GPIO.cleanup()
+        client.loop_stop()
 
 if __name__ == "__main__":
     main()
