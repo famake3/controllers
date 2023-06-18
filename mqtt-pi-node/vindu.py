@@ -112,8 +112,8 @@ def main():
             try:
                 client.connect(mqtt_server, mqtt_port, mqtt_reconnect_seconds)
                 connected = True
-            except IOError:
-                pass
+            except IOError as e:
+                print("client.connect:", e)
 
         client.loop_start()
         client.subscribe("soverom/vindu/aapning")
@@ -129,8 +129,6 @@ def main():
 
         controlWindow(client)
 
-    except RuntimeError: # Force to handle runtime error from wait_for_edge, to run finally
-            pass
     finally:
         GPIO.cleanup()
         client.loop_stop()
