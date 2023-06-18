@@ -1,6 +1,6 @@
 import paho.mqtt.client as mqtt
-import RPi.GPIO as GPIO
 import time
+import pigpio
 from threading import Condition
 
 OPEN_PIN = 2
@@ -18,6 +18,8 @@ alignFirst = 0
 ALIGN_AMOUNT = 2.0
 alignAmountRemain = 0.0
 newCommandCond = Condition()
+
+pi = pigpio.pi()  # Connect to local Pi.
 
 def mqttCallback(client, userdata, message):
     global targetPercentage, alignFirst, alignAmountRemain
@@ -85,8 +87,8 @@ def controlWindow(client):
         else:
             currentMode = 0
 
-        GPIO.output(OPEN_PIN, GPIO.HIGH if currentMode == 1 else GPIO.LOW)
-        GPIO.output(CLOSE_PIN, GPIO.HIGH if currentMode == -1 else GPIO.LOW)
+        pi.write(OPEN_PIN, pigpio.HIGH if currentMode == 1 else pigpio.LOW)
+        pi.write(CLOSE_PIN, pigpio.HIGH if currentMode == -1 else pigpio.LOW)
 
         if newPercentage != currentPercentage:
             currentPercentage = newPercentage
@@ -120,17 +122,16 @@ def main():
         client.subscribe("soverom/vindu/konf/tid")
         client.publish("soverom/vindu/oppstart", "ON")
 
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(OPEN_PIN, GPIO.OUT)
-        GPIO.setup(CLOSE_PIN, GPIO.OUT)
+        pi.set_mode(OPEN_PIN, pigpio.OUTPUT)
+        pi.set_mode(CLOSE_PIN, pigpio.OUTPUT)
 
-        GPIO.output(OPEN_PIN, GPIO.LOW)
-        GPIO.output(CLOSE_PIN, GPIO.LOW)
+        pi.write(OPEN_PIN, pigpio.LOW)
+        pi.write(CLOSE_PIN, pigpio.LOW)
 
         controlWindow(client)
 
     finally:
-        GPIO.cleanup()
+        pi.stop()
         client.loop_stop()
 
 if __name__ == "__main__":
