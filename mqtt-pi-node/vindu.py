@@ -76,12 +76,12 @@ class BlindsController:
                     pigpio.pulse(
                             pin_mask if bit == '1' else 0,
                             pin_mask if bit == '0' else 0,
-                            rf_pulse_time*1e6
+                            int(rf_pulse_time*1e6)
                             )
                     ]
             waves.extend(wave)
         # Always return to zero
-        waves.append(pigpio.pulse(0, pin_mask, rf_pulse_time*1e6))
+        waves.append(pigpio.pulse(0, pin_mask, int(rf_pulse_time*1e6)))
         pi.wave_add_generic(waves)
         return pi.wave_create()
 
