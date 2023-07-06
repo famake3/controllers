@@ -42,19 +42,22 @@ class BlindsController:
                     rf_pulse_time,
                     packet_unit_time, num_repeat_packets,
                     minimum_interval,
+                    make_long_pause=False,
+                    start_state=0,
                     full_open_time=60.0):
-        self.target_percentage = 0.0
-        self.current_percentage = 0.0
+        self.target_percentage = start_state
+        self.current_percentage = start_state
         self.current_mode = 0
-        self.start_percentage = 0.0
+        self.start_percentage = start_state
         self.last_command_time = 0
 
         self.pi = pi
         self.minimum_interval = minimum_interval
         # Add a small fudge factor to account for imprecision in the timing
-        self.minimum_adjustable_percentage = 1.8 * (minimum_interval * 100.0 / full_open_time)
+        self.minimum_adjustable_percentage = 1.6 * (minimum_interval * 100.0 / full_open_time)
         self.packet_unit_time = packet_unit_time
         self.num_repeat_packets = num_repeat_packets
+        self.make_long_pause = make_long_pause
         self.full_open_time = full_open_time
 
         self.pi.set_mode(rf_pin, pigpio.OUTPUT)
@@ -88,9 +91,11 @@ class BlindsController:
 
     def send_wave(self, wave_id):
         #print("SENDING WAVE", wave_id)
-        for _ in range(self.num_repeat_packets):
+        for i in range(self.num_repeat_packets):
             self.pi.wave_send_once(wave_id)
             time.sleep(self.packet_unit_time)
+            if i == self.num_repeat_packets / 2 and self.make_long_pause:
+                time.sleep(self.packet_unit_time * 2)
 
 
     def update(self, currentTime, changed_percentage_callback):
@@ -104,17 +109,22 @@ class BlindsController:
             deltaPercentage = 100.0 * elapsedTime * self.current_mode / self.full_open_time
             newPercentage = max(0, min(100, self.start_percentage + deltaPercentage))
 
+        # If running we want to go past the target, if stopped, be close to it
+        up_slack = self.minimum_adjustable_percentage if self.current_mode != 1 else 0
+        dn_slack = self.minimum_adjustable_percentage if self.current_mode != -1 else 0
+
         # Determine new desired mode
-        if newPercentage < (self.target_percentage - self.minimum_adjustable_percentage):
+        if newPercentage < (self.target_percentage - up_slack):
             set_mode = 1
-        elif newPercentage > (self.target_percentage + self.minimum_adjustable_percentage):
+        elif newPercentage > (self.target_percentage + dn_slack):
             set_mode = -1
         else:
             set_mode = 0
         
         if set_mode != self.current_mode:
             if elapsedTime > self.minimum_interval:
-                if set_mode in [-1, 1] or self.target_percentage not in [0, 100]:
+                if set_mode in [-1, 1] or int(self.target_percentage) not in [0, 100]:
+                    # Active go / stop commands
                     self.current_mode = set_mode
                     if set_mode == 1:
                         self.last_command_time = currentTime
@@ -127,10 +137,14 @@ class BlindsController:
                     else:
                         # No need to send stop if going to 0 or 100 because it will stop
                         # automatically
-                        if self.target_percentage != 0 and self.target_percentage != 100:
-                            self.last_command_time = currentTime
-                            self.start_percentage = newPercentage
-                            self.send_wave(self.stop_wave)
+                        self.last_command_time = currentTime
+                        self.start_percentage = newPercentage
+                        self.send_wave(self.stop_wave)
+                elif set_mode == 0 and int(self.target_percentage) in [0, 100]:
+                    # Just let it stop itself - but note that we change mode
+                    self.current_mode = set_mode
+                    self.last_command_time = currentTime
+                    self.start_percentage = newPercentage
 
         if newPercentage != self.current_percentage:
             self.current_percentage = newPercentage
@@ -139,8 +153,10 @@ class BlindsController:
                 changed_percentage_callback(new_pct)
 
         if self.current_mode == 0 and set_mode == 0:
+            #print('wait', IDLE_WAIT_TIME)
             return IDLE_WAIT_TIME
         else:
+            #print('waiting', self.current_mode , set_mode , self.current_percentage, newPercentage, self.target_percentage)
             return min(ACTIVE_WAIT_TIME,
                     (self.full_open_time *
                         abs(self.target_percentage - self.current_percentage) / 100.0)
@@ -252,6 +268,8 @@ def main():
             rf_pulse_time=350e-6,
             num_repeat_packets=6,
             minimum_interval=1.0,
+            make_long_pause=True,
+            start_state=100,
             full_open_time=36.5)
     
     def mqttCallback(client, userdata, message):
