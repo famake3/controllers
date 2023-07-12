@@ -40,7 +40,8 @@ class BlindsController:
     def __init__(self, pi, rf_pin,
                     up_command, stop_command, down_command,
                     rf_pulse_time,
-                    packet_unit_time, num_repeat_packets,
+                    pause_time,
+                    num_repeated_packets,
                     minimum_interval,
                     make_long_pause=False,
                     start_state=0,
@@ -55,47 +56,42 @@ class BlindsController:
         self.minimum_interval = minimum_interval
         # Add a small fudge factor to account for imprecision in the timing
         self.minimum_adjustable_percentage = 1.6 * (minimum_interval * 100.0 / full_open_time)
-        self.packet_unit_time = packet_unit_time
-        self.num_repeat_packets = num_repeat_packets
         self.make_long_pause = make_long_pause
+        if make_long_pause:
+            raise ValueError("make_long_pause is no longer available")
         self.full_open_time = full_open_time
 
         self.pi.set_mode(rf_pin, pigpio.OUTPUT)
-        self.up_wave = self.make_wave(pi, rf_pin, rf_pulse_time, up_command)
-        self.stop_wave = self.make_wave(pi, rf_pin, rf_pulse_time, stop_command)
-        self.down_wave = self.make_wave(pi, rf_pin, rf_pulse_time, down_command)
+        self.up_wave = self.make_wave(pi, rf_pin, rf_pulse_time, up_command, pause_time, num_repeated_packets)
+        self.stop_wave = self.make_wave(pi, rf_pin, rf_pulse_time, stop_command, pause_time, num_repeated_packets)
+        self.down_wave = self.make_wave(pi, rf_pin, rf_pulse_time, down_command, pause_time, num_repeated_packets)
     
         self.send_wave(self.stop_wave)
 
 
-    def make_wave(self, pi, rf_pin, rf_pulse_time, hex_string):
+    def make_wave(self, pi, rf_pin, rf_pulse_time, hex_string, pause_time, num_repeated_packets):
         bin_string = bin(int(hex_string, 16))[2:].zfill(len(hex_string)*4)
         waves = []
         pin_mask = 1<<rf_pin
-        for bit in bin_string:
-            wave = []
-            # Set the pin high or low depending on the bit value
-            wave = [
-                    pigpio.pulse(
-                            pin_mask if bit == '1' else 0,
-                            pin_mask if bit == '0' else 0,
-                            int(rf_pulse_time*1e6)
-                            )
-                    ]
-            waves.extend(wave)
-        # Always return to zero
-        waves.append(pigpio.pulse(0, pin_mask, int(rf_pulse_time*1e6)))
+        for _ in range(num_repeated_packets):
+            for bit in bin_string:
+                # Set the pin high or low depending on the bit value
+                wave = pigpio.pulse(
+                                pin_mask if bit == '1' else 0,
+                                pin_mask if bit == '0' else 0,
+                                int(rf_pulse_time*1e6)
+                                )
+                waves.append(wave)
+            # Send pause
+            waves.append(pigpio.pulse(0, pin_mask, int(pause_time*1e6)))
+
         pi.wave_add_generic(waves)
         return pi.wave_create()
 
 
     def send_wave(self, wave_id):
         #print("SENDING WAVE", wave_id)
-        for i in range(self.num_repeat_packets):
-            self.pi.wave_send_once(wave_id)
-            time.sleep(self.packet_unit_time)
-            if i == self.num_repeat_packets / 2 and self.make_long_pause:
-                time.sleep(self.packet_unit_time * 2)
+        self.pi.wave_send_once(wave_id)
 
 
     def update(self, currentTime, changed_percentage_callback):
@@ -264,11 +260,11 @@ def main():
             up_command="fffc349b6d36d369369269a49249a49a498",
             stop_command="fffc349b6d36d369369269a49249a69a698",
             down_command="fffc349b6d36d369369269a49249a4da4d8",
-            packet_unit_time=57824e-6,
+            pause_time=57824e-6 - 350e-6 * 35,
             rf_pulse_time=350e-6,
-            num_repeat_packets=6,
+            num_repeated_packets=6,
             minimum_interval=1.0,
-            make_long_pause=True,
+            make_long_pause=False,
             start_state=100,
             full_open_time=36.5)
     
