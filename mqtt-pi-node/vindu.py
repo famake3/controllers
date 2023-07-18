@@ -284,6 +284,10 @@ def main():
                 newCommandCond.notify()
 
     client.on_message = mqttCallback
+    def on_connect(client, userdata, flax, rc):
+        client.subscribe("soverom/vindu/aapning")
+        client.subscribe("soverom/rullgardin/aapning")
+    client.on_connect = on_connect
     connected = False
     try:
         while not connected:
@@ -301,8 +305,6 @@ def main():
             client.publish("soverom/rullgardin/aapningStatus", new_pct)
 
         client.loop_start()
-        client.subscribe("soverom/vindu/aapning")
-        client.subscribe("soverom/rullgardin/aapning")
         #client.subscribe("soverom/vindu/konf/tid") # Setting open time is not implemented
         client.publish("soverom/vindu/oppstart", "ON")
 
