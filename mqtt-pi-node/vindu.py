@@ -248,6 +248,8 @@ class WindowController:
         elif set_new_opening > 98:
             self.align_first = 1
             self.align_amount_remain = ALIGN_AMOUNT
+        else:
+            self.align_first = 0
 
         self.target_opening = set_new_opening
 
