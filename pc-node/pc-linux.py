@@ -41,8 +41,7 @@ def main(mqtt_server, topic_base, pc):
                 #turn off screen
                 pass
             elif str_payload == "screenon" and pc in ['tv']:
-                #turn on screen
-                pass
+                subprocess.run(["bash", "/home/fa2k/bin/turn-on-screen.sh"])
             elif str_payload == "wakealarm":
                 wakealarm_process = subprocess.Popen(["paplay", "{}/vekke.wav".format(sounddir)])
             elif str_payload == "wakealarmkill":
