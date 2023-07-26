@@ -35,19 +35,7 @@ def main(mqtt_server, topic_base, pc):
                 subprocess.run(["paplay", "{}/pipipipipipip.wav".format(sounddir)])
             elif str_payload == "beep":
                 subprocess.run(["paplay", "{}/pip.wav".format(sounddir)])
-            elif str_payload.endswith("mine") and pc in ["blackhole"]:
-                running = subprocess.run(["supervisorctl","pid","xmr"],
-                                        encoding="ascii", stdout=subprocess.PIPE
-                                        ).stdout.strip() != "0"
-                if not running and str_payload == "startmine":
-                    subprocess.run(["supervisorctl","start","xmr"])
-                elif running and str_payload == "stopmine":
-                    subprocess.run(["supervisorctl","stop","xmr"])
-            elif str_payload == "badmineon" and pc in ['blackhole']:
-                subprocess.run(["bash","/etc/openhab-bin/badmine","on"])
-            elif str_payload == "badmineoff" and pc in ['blackhole']:
-                subprocess.run(["bash","/etc/openhab-bin/badmine","off"])
-            elif str_payload == "lockscreen" and pc in ['tv']:
+            elif str_payload == "lockscreen" and pc in ['tv', 'nepe']:
                 subprocess.run(["bash","/home/fa2k/bin/lock-screen.sh"])
             elif str_payload == "screenoff" and pc in ['tv']:
                 #subprocess.run(["xset","dpms", "force", "off"])
