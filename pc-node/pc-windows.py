@@ -3,11 +3,7 @@ from paho.mqtt import client as mqtt
 import sys
 import os
 import time
-import requests
-
-# Run predefined commands on computer
-
-wakealarm_process = None
+import playsound
 
 def main(mqtt_server, topic_base, pc):
     client = mqtt.Client()
@@ -32,22 +28,23 @@ def main(mqtt_server, topic_base, pc):
             return
         if msg.topic == "{}/command".format(topic_base):
             if str_payload == "alarmbeep":
-                subprocess.run(["paplay", "{}/pipipipipipip.wav".format(sounddir)])
+                try:
+                    playsound.playsound("{}\\pipipipipipip.wav".format(sounddir))
+                except playsound.PlaysoundException as e:
+                    print(e)
             elif str_payload == "beep":
-                subprocess.run(["paplay", "{}/pip.wav".format(sounddir)])
-            elif str_payload == "lockscreen" and pc in ['tv', 'nepe']:
-                subprocess.run(["bash","/home/fa2k/bin/lock-screen.sh"])
+                try:
+                    playsound.playsound("{}\\pip.wav".format(sounddir))
+                except playsound.PlaysoundException as e:
+                    print(e)
+            elif str_payload == "lockscreen" and pc in ['tv']:
+                subprocess.run(["rundll32.exe","user32.dll,LockWorkStation"])
             elif str_payload == "screenoff" and pc in ['tv']:
                 #turn off screen
                 pass
             elif str_payload == "screenon" and pc in ['tv']:
                 #turn on screen
                 pass
-            elif str_payload == "wakealarm":
-                wakealarm_process = subprocess.Popen(["paplay", "{}/vekke.wav".format(sounddir)])
-            elif str_payload == "wakealarmkill":
-                if wakealarm_process is not None and wakealarm_process.poll() is None:
-                    wakealarm_process.kill()
 
     client.on_message = on_message
     client.loop_forever()
