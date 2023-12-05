@@ -1,0 +1,7 @@
+name: pc-windows
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - paho-mqtt
+  - playsound
