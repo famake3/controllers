@@ -6,7 +6,7 @@ from threading import Condition
 OPEN_PIN = 2
 CLOSE_PIN = 3
 
-RF_PIN = 4
+RF_PIN = 17
 
 IDLE_WAIT_TIME = 1000
 ACTIVE_WAIT_TIME = 0.3
