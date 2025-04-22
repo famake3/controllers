@@ -11,53 +11,61 @@ import paho.mqtt.client as mqtt
 # 1) Update these to match your setup:
 logger = logging.getLogger("CalimaMQTT")
 
-def _with_retry(fn, *args, retries=3, delay_s=0.5):
+
+def _create_fan_with_retry(mac, pin, retries=3, delay_s=0.5):
     """
-    Try to call fn(*args).  On BTLEDisconnectError, wait and retry.
-    Returns the result of fn, or raises the last exception if all retries fail.
+    Try to instantiate Calima(mac, pin). On BTLEDisconnectError, wait and retry.
+    Returns a connected Calima instance or raises the last exception.
     """
     last_exc = None
-    for attempt in range(1, retries+1):
+    for attempt in range(1, retries + 1):
+        try:
+            return Calima(mac, pin)
+        except BTLEDisconnectError as e:
+            last_exc = e
+            logger.warning("BLE constructor failed attempt %d/%d: %s", attempt, retries, e)
+            if attempt < retries:
+                time.sleep(delay_s)
+    raise last_exc
+
+def set_speeds_with_retry(mac, pin, humidity, light, trickle, retries=3, delay_s=0.5):
+    fan = None
+    try:
+        # retry the constructor itself
+        fan = _create_fan_with_retry(mac, pin, retries, delay_s)
+        # then retry the setting call
+        _with_retry = lambda fn, *args: _generic_retry(fn, args, retries, delay_s)
+        _with_retry(fan.setFanSpeedSettings, humidity, light, trickle)
+
+        logger.info("Fan speeds sent successfully: %r", (humidity, light, trickle))
+    finally:
+        if fan:
+            try: fan.disconnect()
+            except: pass
+
+def set_boost_with_retry(mac, pin, on, speed, duration, retries=3, delay_s=0.5):
+    fan = None
+    try:
+        fan = _create_fan_with_retry(mac, pin, retries, delay_s)
+        _with_retry = lambda fn, *args: _generic_retry(fn, args, retries, delay_s)
+        _with_retry(fan.setBoostMode, on, speed, duration)
+        logger.info("Boost mode set: on=%s speed=%d duration=%ds", on, speed, duration)
+    finally:
+        if fan:
+            try: fan.disconnect()
+            except: pass
+
+def _generic_retry(fn, args, retries, delay_s):
+    last_exc = None
+    for attempt in range(1, retries + 1):
         try:
             return fn(*args)
         except BTLEDisconnectError as e:
             last_exc = e
-            logger.warning("BTLE disconnect on attempt %d/%d: %s", attempt, retries, e)
+            logger.warning("BTLE call failed attempt %d/%d: %s", attempt, retries, e)
             if attempt < retries:
                 time.sleep(delay_s)
-    # all retries failed
     raise last_exc
-
-def set_speeds_with_retry(mac, pin, humidity, light, trickle):
-    fan = Calima(mac, pin)
-    try:
-        # wrap the actual speed‑setting call
-        _with_retry(fan.setFanSpeedSettings, humidity, light, trickle)
-        # optionally verify that the settings took by reading them back
-        actual = fan.getFanSpeedSettings()
-        if (actual.Humidity, actual.Light, actual.Trickle) != (humidity, light, trickle):
-            logger.warning("Settings mismatch: asked %r, got %r", 
-                           (humidity, light, trickle), actual)
-        else:
-            logger.info("Fan speeds set successfully: %r", (humidity, light, trickle))
-    finally:
-        # make sure we always disconnect
-        try:
-            fan.disconnect()
-        except Exception:
-            pass
-
-def set_boost_with_retry(mac, pin, on, speed, duration):
-    fan = Calima(mac, pin)
-    try:
-        _with_retry(fan.setBoostMode, on, speed, duration)
-        logger.info("Boost mode set: on=%s speed=%d/%ds", on, speed, duration)
-    finally:
-        try:
-            fan.disconnect()
-        except:
-            pass
-
 
 
 try:
@@ -86,12 +94,10 @@ def on_connect(client, userdata, flags, rc):
         logger.error("Failed to connect to MQTT broker (rc={}).".format(rc))
 
 def on_message(client, userdata, msg):
-    fan = None
     try:
         if msg.topic == MQTT_SPEED_TOPIC:
             payload = msg.payload.decode("utf-8").strip()
             logger.info("Received speed command: {}".format(payload))
-
             try:
                 humidity, light, trickle = [int(x) for x in payload.split("|")]
             except Exception as e:
@@ -102,7 +108,6 @@ def on_message(client, userdata, msg):
         elif msg.topic == MQTT_BOOST_TOPIC:
             payload = msg.payload.decode("utf-8").strip()
             logger.info("Received boost command: {}".format(payload))
-
             try:
                 on, speed, time = [x for x in payload.split("|")]
                 on = str(on).upper() in ["TRUE", "ON", "1"]
@@ -112,17 +117,12 @@ def on_message(client, userdata, msg):
                 logger.error("Payload '{}' is not a valid boost triple (on, speed, time).".format(payload))
                 return
             set_boost_with_retry(MAC_ADDRESS, PINCODE, on, speed, time)
+        else:
+            logger.info("Ignoring unknown topic {}.".format(msg.topic))
 
-    except BTLEDisconnectError as e:
-        logger.warning("BTLE disconnect error while controlling fan: {}".format(e))
     except Exception as e:
         logger.error("Error while controlling fan: {}".format(e))
-    finally:
-        if fan:
-            try:
-                fan.disconnect()
-            except:
-                pass
+
 
 def main():
     client = mqtt.Client(client_id="CalimaFanService")
