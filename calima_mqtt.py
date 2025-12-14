@@ -8,9 +8,12 @@ from pycalima.Calima import Calima
 from bluepy.btle import BTLEDisconnectError
 import paho.mqtt.client as mqtt
 
-# 1) Update these to match your setup:
-logger = logging.getLogger("CalimaMQTT")
 
+logging.basicConfig(
+            level=os.environ.get('LOGLEVEL', 'INFO').upper()
+            )
+
+logger = logging.getLogger("CalimaMQTT")
 
 def _create_fan_with_retry(mac, pin, retries=3, delay_s=0.5):
     """
@@ -20,12 +23,15 @@ def _create_fan_with_retry(mac, pin, retries=3, delay_s=0.5):
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
-            return Calima(mac, pin)
-        except BTLEDisconnectError as e:
-            last_exc = e
-            logger.warning("BLE constructor failed attempt %d/%d: %s", attempt, retries, e)
-            if attempt < retries:
-                time.sleep(delay_s)
+            try:
+                return Calima(mac, pin)
+            except BTLEDisconnectError as e:
+                last_exc = e
+                logger.warning("BLE constructor failed attempt %d/%d: %s", attempt, retries, e)
+                if attempt < retries:
+                    time.sleep(delay_s)
+        except Exception as e:
+            logger.warning("There was an uncaught exception in attempt %d/%d: %s", attempt, retries, e)
     raise last_exc
 
 def set_speeds_with_retry(mac, pin, humidity, light, trickle, retries=3, delay_s=0.5):
@@ -86,12 +92,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("CalimaMQTT")
 
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logger.info("Connected to MQTT broker.")
         client.subscribe([(MQTT_BOOST_TOPIC, 0), (MQTT_SPEED_TOPIC, 0)])
     else:
         logger.error("Failed to connect to MQTT broker (rc={}).".format(rc))
+
 
 def on_message(client, userdata, msg):
     try:
@@ -124,6 +132,7 @@ def on_message(client, userdata, msg):
         logger.error("Error while controlling fan: {}".format(e))
 
 
+
 def main():
     client = mqtt.Client(client_id="CalimaFanService")
     client.on_connect = on_connect
@@ -140,3 +149,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
