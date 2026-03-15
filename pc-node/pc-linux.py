@@ -47,6 +47,29 @@ def main(mqtt_server, topic_base, pc):
             elif str_payload == "wakealarmkill":
                 if wakealarm_process is not None and wakealarm_process.poll() is None:
                     wakealarm_process.kill()
+        elif msg.topic == "{}/brightness".format(topic_base):
+            try:
+                brightness = int(round(float(str_payload)))
+            except ValueError:
+                return
+            brightness = max(0, min(100, brightness))
+
+            # ddcutil VCP 0x10 = luminance.
+            # Current buses on nepe:
+            #   Display 1 -> /dev/i2c-5   (LCD, generally dimmer)
+            #   Display 2 -> /dev/i2c-15  (MSI OLED, keep a bit lower)
+            lcd_brightness = brightness
+            oled_brightness = max(0, min(100, brightness - 12))
+
+            brightness_commands = [
+                ["ddcutil", "--bus=5", "setvcp", "10", str(lcd_brightness)],
+                ["ddcutil", "--bus=15", "setvcp", "10", str(oled_brightness)],
+            ]
+            for cmd in brightness_commands:
+                try:
+                    subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
 
     client.on_message = on_message
     client.loop_forever()
