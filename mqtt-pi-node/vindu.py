@@ -94,7 +94,7 @@ class BlindsController:
         self.pi.wave_send_once(wave_id)
 
 
-    def update(self, currentTime, changed_percentage_callback):
+    def update(self, currentTime, changed_percentage_callback, changed_state_callback=None):
         """Compute the window position, execute the required action.
 
         Returns the expected remaining time for the manoeuvre or maximum timeout."""
@@ -117,6 +117,7 @@ class BlindsController:
         else:
             set_mode = 0
         
+        previous_mode = self.current_mode
         if set_mode != self.current_mode:
             if elapsedTime > self.minimum_interval:
                 if set_mode in [-1, 1] or int(self.target_percentage) not in [0, 100]:
@@ -141,6 +142,9 @@ class BlindsController:
                     self.current_mode = set_mode
                     self.last_command_time = currentTime
                     self.start_percentage = newPercentage
+
+        if self.current_mode != previous_mode and changed_state_callback:
+            changed_state_callback({1: "INCREASING", -1: "DECREASING", 0: "STOPPED"}[self.current_mode])
 
         if newPercentage != self.current_percentage:
             self.current_percentage = newPercentage
@@ -189,7 +193,7 @@ class WindowController:
         self.minimum_adjustment_error = 1.8 * (ACTIVE_WAIT_TIME * 100.0 / full_open_time)
 
 
-    def update(self, currentTime, changed_opening_callback):
+    def update(self, currentTime, changed_opening_callback, changed_state_callback=None):
         """Compute the window position, execute the required action.
         
         Returns the expected remaining time for the manoeuvre or maximum timeout."""
@@ -208,6 +212,7 @@ class WindowController:
             if self.align_first and self.align_amount_remain < 0:
                 self.align_first = 0
 
+        previous_mode = self.current_mode
         if self.align_first != 0:
             self.current_mode = self.align_first
             self.last_command_time = currentTime
@@ -222,6 +227,9 @@ class WindowController:
             self.start_opening = newOpening
         else:
             self.current_mode = 0
+
+        if self.current_mode != previous_mode and changed_state_callback:
+            changed_state_callback({1: "INCREASING", -1: "DECREASING", 0: "STOPPED"}[self.current_mode])
 
         if newOpening != self.current_opening:
             self.current_opening = newOpening
@@ -303,8 +311,14 @@ def main():
         def window_new_percentage_callback(new_pct):
             client.publish("soverom/vindu/aapningStatus", new_pct)
 
+        def window_new_state_callback(state):
+            client.publish("soverom/vindu/tilstand", state)
+
         def blinds_new_percentage_callback(new_pct):
             client.publish("soverom/rullgardin/aapningStatus", new_pct)
+
+        def blinds_new_state_callback(state):
+            client.publish("soverom/rullgardin/tilstand", state)
 
         client.loop_start()
         #client.subscribe("soverom/vindu/konf/tid") # Setting open time is not implemented
@@ -313,8 +327,8 @@ def main():
         while True:
             current_time = time.time()
 
-            window_time = window.update(current_time, window_new_percentage_callback)
-            blinds_time = blinds.update(current_time, blinds_new_percentage_callback)
+            window_time = window.update(current_time, window_new_percentage_callback, window_new_state_callback)
+            blinds_time = blinds.update(current_time, blinds_new_percentage_callback, blinds_new_state_callback)
             wait_time = min(window_time, blinds_time)
             with newCommandCond:
                 newCommandCond.wait(timeout=wait_time)
