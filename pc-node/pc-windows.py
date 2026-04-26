@@ -30,6 +30,12 @@ PC_CONFIGS = {
 
 
 wakealarm_stop = threading.Event()
+DEBUG = False
+
+
+def debug_print(*args):
+    if DEBUG:
+        print("[pc-windows]", *args, flush=True)
 
 
 def get_pc_config(pc):
@@ -83,25 +89,40 @@ def find_controlmymonitor():
     ]
     for candidate in candidates:
         if candidate and os.path.exists(candidate):
+            debug_print("Using ControlMyMonitor:", candidate)
             return candidate
+    debug_print("ControlMyMonitor not found in candidates:", candidates)
     return None
 
 
 def set_monitor_brightness(controlmymonitor, monitor_id, brightness):
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return subprocess.run(
-        [controlmymonitor, "/SetValue", monitor_id, "10", str(brightness)],
+    cmd = [controlmymonitor, "/SetValue", monitor_id, "10", str(brightness)]
+    debug_print("Running:", cmd)
+    result = subprocess.run(
+        cmd,
         check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        capture_output=DEBUG,
         creationflags=creationflags,
-    ).returncode
+    )
+    if DEBUG:
+        stdout = result.stdout.decode(errors="replace").strip() if result.stdout else ""
+        stderr = result.stderr.decode(errors="replace").strip() if result.stderr else ""
+        debug_print("Return code:", result.returncode)
+        if stdout:
+            debug_print("stdout:", stdout)
+        if stderr:
+            debug_print("stderr:", stderr)
+    return result.returncode
 
 
 def apply_brightness(pc, brightness):
     config = get_pc_config(pc)
     monitors = config.get("monitors", [])
+    debug_print("Brightness request for", pc, "=", brightness)
+    debug_print("Monitor config:", monitors)
     if not monitors:
+        debug_print("No monitors configured for", pc)
         return
 
     controlmymonitor = find_controlmymonitor()
@@ -112,20 +133,26 @@ def apply_brightness(pc, brightness):
     # After monitor sleep, DDC/CI often needs a few seconds before it responds.
     for delay in (0, 3, 8):
         if delay:
+            debug_print("Sleeping", delay, "seconds before retry")
             time.sleep(delay)
         all_ok = True
         seen = set()
         for monitor in monitors:
             monitor_id = monitor["id"]
             if monitor_id in seen:
+                debug_print("Skipping duplicate monitor id", monitor_id)
                 continue
             seen.add(monitor_id)
             monitor_brightness = max(0, min(100, brightness + monitor.get("offset", 0)))
+            debug_print("Setting", monitor_id, "to", monitor_brightness, "(offset", monitor.get("offset", 0), ")")
             rc = set_monitor_brightness(controlmymonitor, monitor_id, monitor_brightness)
             if rc != 0:
                 all_ok = False
         if all_ok:
+            debug_print("Brightness update succeeded")
             break
+    else:
+        debug_print("Brightness update failed after retries")
 
 
 def main(mqtt_server, topic_base, pc):
@@ -182,4 +209,9 @@ def main(mqtt_server, topic_base, pc):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    args = sys.argv[1:]
+    if "--debug" in args:
+        DEBUG = True
+        args = [arg for arg in args if arg != "--debug"]
+        debug_print("Debug enabled")
+    main(*args)
