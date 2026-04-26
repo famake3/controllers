@@ -1,9 +1,132 @@
-import subprocess
-from paho.mqtt import client as mqtt
-import sys
 import os
+import shutil
+import subprocess
+import sys
+import threading
 import time
+
 import playsound
+from paho.mqtt import client as mqtt
+
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
+
+PC_CONFIGS = {
+    "tv": {
+        "lockscreen": True,
+        "monitors": [],
+    },
+    "nepe": {
+        "lockscreen": True,
+        "monitors": [
+            {"id": r"\\.\DISPLAY5\Monitor0", "offset": 0},
+            {"id": r"\\.\DISPLAY1\Monitor0", "offset": -12},
+        ],
+    },
+}
+
+
+wakealarm_stop = threading.Event()
+
+
+def get_pc_config(pc):
+    return PC_CONFIGS.get(pc.lower(), {"lockscreen": False, "monitors": []})
+
+
+def play_sound(path):
+    if winsound is not None:
+        try:
+            winsound.PlaySound(path, winsound.SND_FILENAME)
+            return
+        except RuntimeError as e:
+            print(e)
+    try:
+        playsound.playsound(path)
+    except playsound.PlaysoundException as e:
+        print(e)
+
+
+def start_wakealarm(path):
+    wakealarm_stop.clear()
+
+    def _loop():
+        while not wakealarm_stop.is_set():
+            play_sound(path)
+            if wakealarm_stop.is_set():
+                break
+            time.sleep(0.2)
+
+    threading.Thread(target=_loop, daemon=True).start()
+
+
+def stop_wakealarm():
+    wakealarm_stop.set()
+    if winsound is not None:
+        try:
+            winsound.PlaySound(None, 0)
+        except RuntimeError:
+            pass
+
+
+def find_controlmymonitor():
+    candidates = [
+        os.environ.get("CONTROLMYMONITOR_PATH"),
+        r"C:\Users\mariu\Software\ControlMyMonitor\ControlMyMonitor.exe",
+        shutil.which("ControlMyMonitor.exe"),
+        shutil.which("ControlMyMonitor"),
+        r"C:\Program Files\ControlMyMonitor\ControlMyMonitor.exe",
+        r"C:\Program Files (x86)\ControlMyMonitor\ControlMyMonitor.exe",
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "ControlMyMonitor.exe"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def set_monitor_brightness(controlmymonitor, monitor_id, brightness):
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.run(
+        [controlmymonitor, "/SetValue", monitor_id, "10", str(brightness)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    ).returncode
+
+
+def apply_brightness(pc, brightness):
+    config = get_pc_config(pc)
+    monitors = config.get("monitors", [])
+    if not monitors:
+        return
+
+    controlmymonitor = find_controlmymonitor()
+    if controlmymonitor is None:
+        print("ControlMyMonitor.exe not found; brightness command ignored")
+        return
+
+    # After monitor sleep, DDC/CI often needs a few seconds before it responds.
+    for delay in (0, 3, 8):
+        if delay:
+            time.sleep(delay)
+        all_ok = True
+        seen = set()
+        for monitor in monitors:
+            monitor_id = monitor["id"]
+            if monitor_id in seen:
+                continue
+            seen.add(monitor_id)
+            monitor_brightness = max(0, min(100, brightness + monitor.get("offset", 0)))
+            rc = set_monitor_brightness(controlmymonitor, monitor_id, monitor_brightness)
+            if rc != 0:
+                all_ok = False
+        if all_ok:
+            break
+
 
 def main(mqtt_server, topic_base, pc):
     client = mqtt.Client()
@@ -18,36 +141,45 @@ def main(mqtt_server, topic_base, pc):
 
     def on_connect(client, _, flags, rc):
         client.subscribe("{}/#".format(topic_base))
+
     client.on_connect = on_connect
     sounddir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "sounds")
+    config = get_pc_config(pc)
+
     def on_message(client, _, msg):
-        global wakealarm_process
         try:
-            str_payload = msg.payload.decode('ascii')
+            str_payload = msg.payload.decode("ascii")
         except ValueError:
             return
+
         if msg.topic == "{}/command".format(topic_base):
             if str_payload == "alarmbeep":
-                try:
-                    playsound.playsound("{}\\pipipipipipip.wav".format(sounddir))
-                except playsound.PlaysoundException as e:
-                    print(e)
+                play_sound(os.path.join(sounddir, "pipipipipipip.wav"))
             elif str_payload == "beep":
-                try:
-                    playsound.playsound("{}\\pip.wav".format(sounddir))
-                except playsound.PlaysoundException as e:
-                    print(e)
-            elif str_payload == "lockscreen" and pc in ['tv']:
-                subprocess.run(["rundll32.exe","user32.dll,LockWorkStation"])
-            elif str_payload == "screenoff" and pc in ['tv']:
-                #turn off screen
+                play_sound(os.path.join(sounddir, "pip.wav"))
+            elif str_payload == "lockscreen" and config.get("lockscreen"):
+                subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"], check=False)
+            elif str_payload == "screenoff" and pc.lower() in ["tv"]:
+                # turn off screen
                 pass
-            elif str_payload == "screenon" and pc in ['tv']:
-                #turn on screen
+            elif str_payload == "screenon" and pc.lower() in ["tv"]:
+                # turn on screen
                 pass
+            elif str_payload == "wakealarm":
+                start_wakealarm(os.path.join(sounddir, "vekke.wav"))
+            elif str_payload == "wakealarmkill":
+                stop_wakealarm()
+        elif msg.topic == "{}/brightness".format(topic_base):
+            try:
+                brightness = int(round(float(str_payload)))
+            except ValueError:
+                return
+            brightness = max(0, min(100, brightness))
+            threading.Thread(target=apply_brightness, args=(pc, brightness), daemon=True).start()
 
     client.on_message = on_message
     client.loop_forever()
+
 
 if __name__ == "__main__":
     main(*sys.argv[1:])
