@@ -15,24 +15,47 @@ logging.basicConfig(
 
 logger = logging.getLogger("CalimaMQTT")
 
+class SafeCalima(Calima):
+    def __del__(self):
+        try:
+            super(SafeCalima, self).__del__()
+        except AttributeError:
+            pass
+        except Exception:
+            pass
+
 def _create_fan_with_retry(mac, pin, retries=3, delay_s=0.5):
     """
-    Try to instantiate Calima(mac, pin). On BTLEDisconnectError, wait and retry.
+    Try to instantiate Calima(mac, pin). On failure, wait and retry.
     Returns a connected Calima instance or raises the last exception.
     """
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
-            try:
-                return Calima(mac, pin)
-            except BTLEDisconnectError as e:
-                last_exc = e
-                logger.warning("BLE constructor failed attempt %d/%d: %s", attempt, retries, e)
-                if attempt < retries:
-                    time.sleep(delay_s)
+            return SafeCalima(mac, pin)
+        except BTLEDisconnectError as e:
+            last_exc = e
+            logger.warning("BLE constructor failed attempt %d/%d: %s", attempt, retries, e)
         except Exception as e:
-            logger.warning("There was an uncaught exception in attempt %d/%d: %s", attempt, retries, e)
+            last_exc = e
+            logger.warning("Calima constructor failed attempt %d/%d: %s", attempt, retries, e)
+        if attempt < retries:
+            time.sleep(delay_s)
+
+    if last_exc is None:
+        raise RuntimeError("Calima constructor failed without reporting an exception")
     raise last_exc
+
+def _disconnect_fan(fan):
+    if not fan:
+        return
+
+    try:
+        fan.disconnect()
+    except AttributeError as e:
+        logger.warning("Ignoring disconnect on partially initialized fan object: %s", e)
+    except Exception as e:
+        logger.warning("Error while disconnecting fan: %s", e)
 
 def set_speeds_with_retry(mac, pin, humidity, light, trickle, retries=3, delay_s=0.5):
     fan = None
@@ -45,9 +68,7 @@ def set_speeds_with_retry(mac, pin, humidity, light, trickle, retries=3, delay_s
 
         logger.info("Fan speeds sent successfully: %r", (humidity, light, trickle))
     finally:
-        if fan:
-            try: fan.disconnect()
-            except: pass
+        _disconnect_fan(fan)
 
 def set_boost_with_retry(mac, pin, on, speed, duration, retries=3, delay_s=0.5):
     fan = None
@@ -57,9 +78,7 @@ def set_boost_with_retry(mac, pin, on, speed, duration, retries=3, delay_s=0.5):
         _with_retry(fan.setBoostMode, on, speed, duration)
         logger.info("Boost mode set: on=%s speed=%d duration=%ds", on, speed, duration)
     finally:
-        if fan:
-            try: fan.disconnect()
-            except: pass
+        _disconnect_fan(fan)
 
 def _generic_retry(fn, args, retries, delay_s):
     last_exc = None
@@ -69,8 +88,14 @@ def _generic_retry(fn, args, retries, delay_s):
         except BTLEDisconnectError as e:
             last_exc = e
             logger.warning("BTLE call failed attempt %d/%d: %s", attempt, retries, e)
-            if attempt < retries:
-                time.sleep(delay_s)
+        except Exception as e:
+            last_exc = e
+            logger.warning("Fan command failed attempt %d/%d: %s", attempt, retries, e)
+        if attempt < retries:
+            time.sleep(delay_s)
+
+    if last_exc is None:
+        raise RuntimeError("Fan command failed without reporting an exception")
     raise last_exc
 
 
