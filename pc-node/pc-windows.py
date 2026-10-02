@@ -8,6 +8,8 @@ import time
 import playsound
 from paho.mqtt import client as mqtt
 
+from windows_hdr import set_sdr_brightness_if_hdr
+
 try:
     import winsound
 except ImportError:
@@ -23,7 +25,7 @@ PC_CONFIGS = {
         "lockscreen": True,
         "monitors": [
             {"id": r"\\.\DISPLAY5\Monitor0", "offset": 0},
-            {"id": r"\\.\DISPLAY1\Monitor0", "offset": -12},
+            {"id": r"\\.\DISPLAY1\Monitor0", "offset": -12, "hdr_sdr_brightness": True},
         ],
     },
 }
@@ -126,9 +128,6 @@ def apply_brightness(pc, brightness):
         return
 
     controlmymonitor = find_controlmymonitor()
-    if controlmymonitor is None:
-        print("ControlMyMonitor.exe not found; brightness command ignored")
-        return
 
     # After monitor sleep, DDC/CI often needs a few seconds before it responds.
     for delay in (0, 3, 8):
@@ -143,6 +142,19 @@ def apply_brightness(pc, brightness):
                 debug_print("Skipping duplicate monitor id", monitor_id)
                 continue
             seen.add(monitor_id)
+            if monitor.get("hdr_sdr_brightness"):
+                try:
+                    if set_sdr_brightness_if_hdr(monitor_id, brightness):
+                        debug_print("HDR SDR-content brightness:", monitor_id, brightness)
+                        continue
+                except (OSError, AttributeError) as e:
+                    # Unknown HDR state or failed HDR control must never send DDC.
+                    print(f"HDR brightness for {monitor_id}: {e}", flush=True)
+                    all_ok = False
+                    continue
+            if controlmymonitor is None:
+                print(f"ControlMyMonitor.exe not found; skipping DDC for {monitor_id}")
+                continue
             monitor_brightness = max(0, min(100, brightness + monitor.get("offset", 0)))
             debug_print("Setting", monitor_id, "to", monitor_brightness, "(offset", monitor.get("offset", 0), ")")
             rc = set_monitor_brightness(controlmymonitor, monitor_id, monitor_brightness)
@@ -199,7 +211,7 @@ def main(mqtt_server, topic_base, pc):
         elif msg.topic == "{}/brightness".format(topic_base):
             try:
                 brightness = int(round(float(str_payload)))
-            except ValueError:
+            except (ValueError, OverflowError):
                 return
             brightness = max(0, min(100, brightness))
             threading.Thread(target=apply_brightness, args=(pc, brightness), daemon=True).start()
