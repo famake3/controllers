@@ -142,10 +142,11 @@ def apply_brightness(pc, brightness):
                 debug_print("Skipping duplicate monitor id", monitor_id)
                 continue
             seen.add(monitor_id)
+            monitor_brightness = max(0, min(100, brightness + monitor.get("offset", 0)))
             if monitor.get("hdr_sdr_brightness"):
                 try:
-                    if set_sdr_brightness_if_hdr(monitor_id, brightness):
-                        debug_print("HDR SDR-content brightness:", monitor_id, brightness)
+                    if set_sdr_brightness_if_hdr(monitor_id, monitor_brightness):
+                        debug_print("HDR SDR-content brightness:", monitor_id, monitor_brightness)
                         continue
                 except (OSError, AttributeError) as e:
                     # Unknown HDR state or failed HDR control must never send DDC.
@@ -155,7 +156,6 @@ def apply_brightness(pc, brightness):
             if controlmymonitor is None:
                 print(f"ControlMyMonitor.exe not found; skipping DDC for {monitor_id}")
                 continue
-            monitor_brightness = max(0, min(100, brightness + monitor.get("offset", 0)))
             debug_print("Setting", monitor_id, "to", monitor_brightness, "(offset", monitor.get("offset", 0), ")")
             rc = set_monitor_brightness(controlmymonitor, monitor_id, monitor_brightness)
             if rc != 0:
